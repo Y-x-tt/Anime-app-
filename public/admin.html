@@ -1,0 +1,207 @@
+<!DOCTYPE html><html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b12">
+  <title>إدارة HUNTER SYSTEM</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .admin-login { max-width: 480px; margin: 50px auto; }
+    .admin-section { margin-top: 20px; }
+    .admin-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .admin-actions .btn { flex: 1; min-width: 140px; }
+    .user-row { align-items: center; }
+    .user-row button { width: auto; margin: 0; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo">HUNTER <span>ADMIN</span></div>
+    <a href="/" class="muted">العودة للموقع</a>
+  </header>  <main class="container">
+    <section id="loginPanel" class="panel admin-login">
+      <p class="eyebrow">ADMIN AUTHENTICATION</p>
+      <h1>لوحة الإدارة</h1>
+      <p class="muted">أدخل كلمة مرور الإدارة الموجودة في إعدادات Render.</p>  <form id="adminLoginForm">
+    <label for="adminPassword">كلمة المرور</label>
+    <input id="adminPassword" type="password" required
+      autocomplete="current-password">
+    <button class="btn primary" type="submit">دخول لوحة الإدارة</button>
+  </form>
+
+  <p id="loginStatus" class="status"></p>
+</section>
+
+<section id="dashboard" class="hidden">
+  <div class="panel">
+    <p class="eyebrow">OVERVIEW</p>
+    <h1>إدارة الفعالية</h1>
+    <div class="stats">
+      <div class="stat">
+        <span>عدد اللاعبين</span>
+        <strong id="totalUsers">0</strong>
+      </div>
+      <div class="stat">
+        <span>تحليلات بانتظار المراجعة</span>
+        <strong id="pendingCases">0</strong>
+      </div>
+      <div class="stat">
+        <span>الفصائل</span>
+        <strong id="factionCount">0</strong>
+      </div>
+    </div>
+    <div class="admin-actions">
+      <button id="loadUsers" class="btn primary">عرض اللاعبين</button>
+      <button id="logout" class="btn secondary">تسجيل الخروج</button>
+    </div>
+    <p id="dashboardStatus" class="status"></p>
+  </div>
+
+  <div class="panel admin-section">
+    <p class="eyebrow">PLAYER REPORT</p>
+    <h2>طلب معلومات لاعب</h2>
+    <p class="muted">
+      اكتب اسم اللاعب كما سجّله في الموقع، وسيتم إرسال تقريره إلى تيليجرام.
+    </p>
+    <form id="reportForm">
+      <label for="reportUsername">اسم اللاعب</label>
+      <input id="reportUsername" required maxlength="24"
+        placeholder="اسم اللاعب">
+      <button class="btn primary" type="submit">
+        إرسال التقرير إلى تيليجرام
+      </button>
+    </form>
+    <p id="reportStatus" class="status"></p>
+  </div>
+
+  <div class="panel admin-section">
+    <p class="eyebrow">PLAYERS</p>
+    <h2>قائمة اللاعبين</h2>
+    <div id="usersList" class="ranking-list"></div>
+  </div>
+</section>
+
+  </main>  <script>
+    const $ = selector => document.querySelector(selector);
+    let adminPassword = '';
+
+    async function adminApi(url, options = {}) {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminPassword,
+          ...(options.headers || {})
+        }
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'حدث خطأ.');
+      }
+
+      return data;
+    }
+
+    $('#adminLoginForm').addEventListener('submit', async event => {
+      event.preventDefault();
+
+      adminPassword = $('#adminPassword').value;
+      $('#loginStatus').textContent = 'جاري التحقق...';
+
+      try {
+        await adminApi('/api/admin/summary');
+
+        $('#loginPanel').classList.add('hidden');
+        $('#dashboard').classList.remove('hidden');
+
+        $('#loginStatus').textContent = '';
+        await loadSummary();
+        await loadUsers();
+      } catch (error) {
+        adminPassword = '';
+        $('#loginStatus').textContent = error.message;
+      }
+    });
+
+    async function loadSummary() {
+      const data = await adminApi('/api/admin/summary');
+
+      $('#totalUsers').textContent = data.users;
+      $('#pendingCases').textContent = data.submissions;
+      $('#factionCount').textContent = data.factions.length;
+    }
+
+    async function loadUsers() {
+      $('#dashboardStatus').textContent = 'جاري تحميل اللاعبين...';
+
+      try {
+        const data = await adminApi('/api/admin/users');
+        const list = $('#usersList');
+        list.replaceChildren();
+
+        data.users.forEach(user => {
+          const row = document.createElement('div');
+          row.className = 'rank-row user-row';
+
+          const info = document.createElement('div');
+          const name = document.createElement('strong');
+          name.textContent = user.username;
+
+          const details = document.createElement('small');
+          details.textContent =
+            `النقاط: ${user.points} | الإجابات الصحيحة: ${user.quiz_score}`;
+
+          info.append(name, document.createElement('br'), details);
+
+          const button = document.createElement('button');
+          button.className = 'btn secondary';
+          button.textContent = 'طلب تقرير';
+
+          button.addEventListener('click', () => {
+            $('#reportUsername').value = user.username;
+            $('#reportForm').requestSubmit();
+          });
+
+          row.append(info, button);
+          list.appendChild(row);
+        });
+
+        $('#dashboardStatus').textContent =
+          `تم تحميل ${data.users.length} لاعب.`;
+      } catch (error) {
+        $('#dashboardStatus').textContent = error.message;
+      }
+    }
+
+    $('#loadUsers').addEventListener('click', loadUsers);
+
+    $('#reportForm').addEventListener('submit', async event => {
+      event.preventDefault();
+
+      $('#reportStatus').textContent = 'جاري تجهيز وإرسال التقرير...';
+
+      try {
+        const data = await adminApi('/api/admin/user-report', {
+          method: 'POST',
+          body: JSON.stringify({
+            username: $('#reportUsername').value.trim()
+          })
+        });
+
+        $('#reportStatus').textContent = data.message;
+      } catch (error) {
+        $('#reportStatus').textContent = error.message;
+      }
+    });
+
+    $('#logout').addEventListener('click', () => {
+      adminPassword = '';
+      $('#dashboard').classList.add('hidden');
+      $('#loginPanel').classList.remove('hidden');
+      $('#adminPassword').value = '';
+      $('#usersList').replaceChildren();
+    });
+  </script></body>
+                       </html>
