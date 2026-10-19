@@ -1,356 +1,418 @@
 const $ = (selector) => document.querySelector(selector);
 
 let player = null;
+let authToken = localStorage.getItem('hunterToken') || '';
 let quizQuestions = [];
 let quizIndex = 0;
 let timerInterval = null;
 let questionLocked = false;
 let quizStarted = false;
+let requestInProgress = false;
 
 function getDeviceId() {
-let id = localStorage.getItem('hunterDeviceId');
+  let id = localStorage.getItem('hunterDeviceId');
 
-if (!id) {
-id = crypto.randomUUID();
-localStorage.setItem('hunterDeviceId', id);
-}
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem('hunterDeviceId', id);
+  }
 
-return id;
+  return id;
 }
 
 async function api(url, options = {}) {
-const response = await fetch(url, {
-...options,
-headers: {
-'Content-Type': 'application/json',
-...(options.headers || {})
-}
-});
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
 
-const data = await response.json().catch(() => ({}));
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
 
-if (!response.ok) {
-throw new Error(data.error || 'حدث خطأ. حاول مرة أخرى.');
-}
+  const response = await fetch(url, {
+    ...options,
+    headers
+  });
 
-return data;
+  const data = await response.json().catch(() => ({}));
+
+  if (response.status === 401 && url !== '/api/register') {
+    authToken = '';
+    localStorage.removeItem('hunterToken');
+    throw new Error('انتهت جلسة الدخول. سجّل دخولك مجددًا.');
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || 'حدث خطأ. حاول مرة أخرى.');
+  }
+
+  return data;
 }
 
 function setStatus(selector, message) {
-const element = $(selector);
-if (element) element.textContent = message;
+  const element = $(selector);
+  if (element) element.textContent = message;
 }
 
 function factionName(faction) {
-return ({
-light: 'النور',
-dark: 'الظلام',
-immortals: 'الخالدون'
-})[faction] || 'لم تختر';
+  return ({
+    light: 'النور',
+    dark: 'الظلام',
+    immortals: 'الخالدون'
+  })[faction] || 'لم تختر';
 }
 
 function showPlayer() {
-$('#loginScreen').classList.add('hidden');
-$('#appScreen').classList.remove('hidden');
-$('#playerBadge').classList.remove('hidden');
-$('#playerBadge').textContent = "الصياد: ${player.username}";
-updateStats();
-loadLeaderboard();
+  $('#loginScreen').classList.add('hidden');
+  $('#appScreen').classList.remove('hidden');
+  $('#playerBadge').classList.remove('hidden');
+  $('#playerBadge').textContent = `الصياد: ${player.username}`;
+
+  updateStats();
+  loadLeaderboard();
 }
 
 async function updateStats() {
-if (!player) return;
+  if (!player) return;
 
-try {
-const data = await api('/api/leaderboard');
-const mine = data.players.find(p => p.username === player.username);
+  try {
+    const data = await api('/api/leaderboard');
+    const mine = data.players.find(
+      item => item.username === player.username
+    );
 
-if (mine) {
-  $('#playerPoints').textContent = mine.points;
-  $('#playerFaction').textContent = factionName(mine.faction);
-  player.faction = mine.faction;
-  player.points = mine.points;
-}
+    if (mine) {
+      $('#playerPoints').textContent = mine.points;
+      $('#playerFaction').textContent = factionName(mine.faction);
 
-} catch (error) {
-console.error(error);
-}
+      player.faction = mine.faction;
+      player.points = mine.points;
+    }
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 $('#loginForm').addEventListener('submit', async (event) => {
-event.preventDefault();
+  event.preventDefault();
 
-const username = $('#username').value.trim();
-setStatus('#loginStatus', 'جاري الدخول...');
+  if (requestInProgress) return;
+  requestInProgress = true;
 
-try {
-const data = await api('/api/register', {
-method: 'POST',
-body: JSON.stringify({
-username,
-deviceId: getDeviceId()
-})
+  const username = $('#username').value.trim();
+  setStatus('#loginStatus', 'جاري الدخول...');
+
+  try {
+    const data = await api('/api/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        username,
+        deviceId: getDeviceId()
+      })
+    });
+
+    player = data.user;
+    authToken = data.token;
+
+    localStorage.setItem('hunterToken', authToken);
+    localStorage.setItem('hunterUsername', player.username);
+
+    showPlayer();
+  } catch (error) {
+    setStatus('#loginStatus', error.message);
+  } finally {
+    requestInProgress = false;
+  }
 });
 
-player = data.user;
-localStorage.setItem('hunterUsername', player.username);
-
-showPlayer();
-
-} catch (error) {
-setStatus('#loginStatus', error.message);
-}
-});
-
+// اختيار الفصيل.
 document.querySelectorAll('[data-faction]').forEach(button => {
-button.addEventListener('click', async () => {
-if (!player) return;
+  button.addEventListener('click', async () => {
+    if (!player || button.disabled) return;
 
-try {
-  const data = await api('/api/faction', {
-    method: 'POST',
-    body: JSON.stringify({
-      username: player.username,
-      faction: button.dataset.faction
-    })
+    try {
+      const data = await api('/api/faction', {
+        method: 'POST',
+        body: JSON.stringify({
+          faction: button.dataset.faction
+        })
+      });
+
+      player.faction = data.faction;
+
+      document.querySelectorAll('[data-faction]').forEach(item => {
+        item.classList.toggle('selected', item === button);
+        item.disabled = true;
+      });
+
+      setStatus(
+        '#factionStatus',
+        `تم اختيار فصيل ${factionName(data.faction)}.`
+      );
+
+      updateStats();
+      loadLeaderboard();
+    } catch (error) {
+      setStatus('#factionStatus', error.message);
+    }
   });
-
-  player.faction = data.faction;
-
-  document.querySelectorAll('[data-faction]').forEach(item => {
-    item.classList.toggle('selected', item === button);
-    item.disabled = true;
-  });
-
-  setStatus('#factionStatus', `تم اختيار فصيل ${factionName(data.faction)}.`);
-  updateStats();
-  loadLeaderboard();
-} catch (error) {
-  setStatus('#factionStatus', error.message);
-}
-
-});
 });
 
 function showQuestion() {
-clearInterval(timerInterval);
-questionLocked = false;
-
-if (quizIndex >= quizQuestions.length) {
-$('#quizBox').classList.add('hidden');
-$('#quizFinished').classList.remove('hidden');
-$('#quizIntro').classList.add('hidden');
-updateStats();
-loadLeaderboard();
-return;
-}
-
-const question = quizQuestions[quizIndex];
-
-$('#quizBox').classList.remove('hidden');
-$('#quizIntro').classList.add('hidden');
-$('#quizFinished').classList.add('hidden');
-
-$('#questionProgress').textContent =
-"السؤال ${quizIndex + 1} من ${quizQuestions.length}";
-
-$('#questionText').textContent = question.question;
-$('#quizStatus').textContent = '';
-
-const options = $('#answerOptions');
-options.replaceChildren();
-
-question.options.forEach((option, index) => {
-const button = document.createElement('button');
-button.className = 'answer-btn';
-button.textContent = option;
-
-button.addEventListener('click', () => submitAnswer(index));
-
-options.appendChild(button);
-
-});
-
-let seconds = 15;
-$('#timer').textContent = seconds;
-$('#timerBar').style.width = '100%';
-
-timerInterval = setInterval(() => {
-seconds--;
-$('#timer').textContent = Math.max(0, seconds);
-$('#timerBar').style.width = "${Math.max(0, seconds) / 15 * 100}%";
-
-if (seconds <= 0) {
   clearInterval(timerInterval);
-  submitAnswer(-1);
-}
+  questionLocked = false;
 
-}, 1000);
+  if (quizIndex >= quizQuestions.length) {
+    $('#quizBox').classList.add('hidden');
+    $('#quizFinished').classList.remove('hidden');
+    $('#quizIntro').classList.add('hidden');
+
+    quizStarted = false;
+    updateStats();
+    loadLeaderboard();
+    return;
+  }
+
+  const question = quizQuestions[quizIndex];
+
+  $('#quizBox').classList.remove('hidden');
+  $('#quizIntro').classList.add('hidden');
+  $('#quizFinished').classList.add('hidden');
+
+  $('#questionProgress').textContent =
+    `السؤال ${quizIndex + 1} من ${quizQuestions.length}`;
+
+  $('#questionText').textContent = question.question;
+  $('#quizStatus').textContent = '';
+
+  const options = $('#answerOptions');
+  options.replaceChildren();
+
+  question.options.forEach((option, index) => {
+    const button = document.createElement('button');
+    button.className = 'answer-btn';
+    button.textContent = option;
+
+    button.addEventListener('click', () => {
+      submitAnswer(index);
+    });
+
+    options.appendChild(button);
+  });
+
+  let seconds = 15;
+  $('#timer').textContent = seconds;
+  $('#timerBar').style.width = '100%';
+
+  timerInterval = setInterval(() => {
+    seconds--;
+
+    $('#timer').textContent = Math.max(0, seconds);
+    $('#timerBar').style.width =
+      `${Math.max(0, seconds) / 15 * 100}%`;
+
+    if (seconds <= 0) {
+      clearInterval(timerInterval);
+      submitAnswer(-1);
+    }
+  }, 1000);
 }
 
 async function submitAnswer(answerIndex) {
-if (questionLocked || !quizStarted) return;
+  if (questionLocked || !quizStarted) return;
 
-questionLocked = true;
-clearInterval(timerInterval);
+  questionLocked = true;
+  clearInterval(timerInterval);
 
-document.querySelectorAll('.answer-btn').forEach(button => {
-button.disabled = true;
-});
+  document.querySelectorAll('.answer-btn').forEach(button => {
+    button.disabled = true;
+  });
 
-const question = quizQuestions[quizIndex];
+  const question = quizQuestions[quizIndex];
 
-try {
-await api('/api/quiz/answer', {
-method: 'POST',
-body: JSON.stringify({
-username: player.username,
-questionId: question.id,
-answerIndex
-})
-});
+  try {
+    const data = await api('/api/quiz/answer', {
+      method: 'POST',
+      body: JSON.stringify({
+        questionId: question.id,
+        answerIndex
+      })
+    });
 
-// لا نعرض للاعب إن كانت الإجابة صحيحة أو خاطئة.
-quizIndex++;
+    quizIndex++;
 
-setTimeout(showQuestion, 350);
+    if (data.finished) {
+      quizIndex = quizQuestions.length;
+    }
 
-} catch (error) {
-setStatus('#quizStatus', error.message);
-questionLocked = false;
+    setTimeout(showQuestion, 350);
+  } catch (error) {
+    setStatus('#quizStatus', error.message);
+
+    // لا نعيد إرسال إجابة تلقائيًا حتى لا تتكرر.
+    questionLocked = false;
+  }
 }
-}
 
+// بدء الاختبار.
 $('#startQuiz').addEventListener('click', async () => {
-if (!player || quizStarted) return;
+  if (!player || quizStarted) return;
 
-try {
-const data = await api('/api/quiz/start', {
-method: 'POST',
-body: JSON.stringify({ username: player.username })
+  try {
+    setStatus('#quizStatus', 'جاري تجهيز الاختبار...');
+
+    const data = await api('/api/quiz/start', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+
+    if (data.finished || !data.questions.length) {
+      $('#quizIntro').classList.add('hidden');
+      $('#quizFinished').classList.remove('hidden');
+      setStatus('#quizStatus', 'أنهيت جميع الأسئلة.');
+      return;
+    }
+
+    quizQuestions = data.questions;
+    quizIndex = 0;
+    quizStarted = true;
+
+    showQuestion();
+  } catch (error) {
+    setStatus('#quizStatus', error.message);
+  }
 });
 
-if (data.finished || !data.questions.length) {
-  $('#quizIntro').classList.add('hidden');
-  $('#quizFinished').classList.remove('hidden');
-  return;
-}
-
-quizQuestions = data.questions;
-quizIndex = 0;
-quizStarted = true;
-
-showQuestion();
-
-} catch (error) {
-setStatus('#quizStatus', error.message);
-}
-});
-
+// إرسال تحليل القضية.
 $('#caseForm').addEventListener('submit', async (event) => {
-event.preventDefault();
+  event.preventDefault();
 
-const conclusion = $('#caseConclusion').value.trim();
+  if (!player) return;
 
-setStatus('#caseStatus', 'جاري إرسال التحليل...');
+  const conclusion = $('#caseConclusion').value.trim();
 
-try {
-await api('/api/case/submit', {
-method: 'POST',
-body: JSON.stringify({
-username: player.username,
-conclusion
-})
+  setStatus('#caseStatus', 'جاري إرسال التحليل...');
+
+  try {
+    await api('/api/case/submit', {
+      method: 'POST',
+      body: JSON.stringify({ conclusion })
+    });
+
+    $('#caseConclusion').disabled = true;
+    $('#caseForm button').disabled = true;
+
+    setStatus('#caseStatus', 'تم إرسال تحليلك للمراجعة بنجاح.');
+  } catch (error) {
+    setStatus('#caseStatus', error.message);
+  }
 });
 
-$('#caseConclusion').disabled = true;
-$('#caseForm button').disabled = true;
-setStatus('#caseStatus', 'تم إرسال تحليلك للمراجعة بنجاح.');
-
-} catch (error) {
-setStatus('#caseStatus', error.message);
-}
-});
-
+// لوحة المتصدرين.
 async function loadLeaderboard() {
-try {
-const data = await api('/api/leaderboard');
+  try {
+    const data = await api('/api/leaderboard');
 
-const leaderboard = $('#leaderboard');
-leaderboard.replaceChildren();
+    const leaderboard = $('#leaderboard');
+    leaderboard.replaceChildren();
 
-data.players.forEach((item, index) => {
-  const row = document.createElement('div');
-  row.className = 'rank-row';
+    data.players.forEach((item, index) => {
+      const row = document.createElement('div');
+      row.className = 'rank-row';
 
-  const name = document.createElement('strong');
-  name.textContent = `${index + 1}. ${item.username}`;
+      const name = document.createElement('strong');
+      name.textContent = `${index + 1}. ${item.username}`;
 
-  const points = document.createElement('span');
-  points.className = 'rank-points';
-  points.textContent = `${item.points} نقطة`;
+      const points = document.createElement('span');
+      points.className = 'rank-points';
+      points.textContent = `${item.points} نقطة`;
 
-  row.append(name, points);
-  leaderboard.appendChild(row);
-});
+      row.append(name, points);
+      leaderboard.appendChild(row);
+    });
 
-const factions = $('#factionScores');
-factions.replaceChildren();
+    const factions = $('#factionScores');
+    factions.replaceChildren();
 
-data.factions.forEach(item => {
-  const row = document.createElement('div');
-  row.className = 'rank-row';
+    data.factions.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'rank-row';
 
-  const name = document.createElement('strong');
-  name.textContent = factionName(item.faction);
+      const name = document.createElement('strong');
+      name.textContent = factionName(item.faction);
 
-  const points = document.createElement('span');
-  points.className = 'rank-points';
-  points.textContent = `${item.points} نقطة`;
+      const points = document.createElement('span');
+      points.className = 'rank-points';
+      points.textContent = `${item.points} نقطة`;
 
-  row.append(name, points);
-  factions.appendChild(row);
-});
+      row.append(name, points);
+      factions.appendChild(row);
+    });
 
-updateStats();
+    if (player) {
+      const mine = data.players.find(
+        item => item.username === player.username
+      );
 
-} catch (error) {
-console.error(error);
-}
+      if (mine) {
+        $('#playerPoints').textContent = mine.points;
+        $('#playerFaction').textContent = factionName(mine.faction);
+        player.points = mine.points;
+        player.faction = mine.faction;
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 $('#refreshLeaderboard').addEventListener('click', loadLeaderboard);
 
-// استعادة تسجيل الدخول على نفس المتصفح.
+// استعادة الجلسة.
 async function restoreSession() {
-const username = localStorage.getItem('hunterUsername');
-if (!username) return;
+  const username = localStorage.getItem('hunterUsername');
 
-try {
-const data = await api('/api/register', {
-method: 'POST',
-body: JSON.stringify({
-username,
-deviceId: getDeviceId()
-})
-});
+  if (!username || !authToken) return;
 
-player = data.user;
-showPlayer();
+  try {
+    // التحقق من صلاحية الرمز عبر مسار محمي.
+    await api('/api/quiz/start', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
 
-if (player.faction) {
-  document.querySelectorAll('[data-faction]').forEach(button => {
-    button.disabled = true;
-    button.classList.toggle(
-      'selected',
-      button.dataset.faction === player.faction
-    );
-  });
-}
+    // السيرفر لا يعيد بيانات اللاعب من هذا المسار،
+    // لذلك نستخدم بيانات التسجيل لاستعادتها.
+    const data = await api('/api/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        username,
+        deviceId: getDeviceId()
+      })
+    });
 
-} catch (error) {
-console.error(error);
-}
+    player = data.user;
+    authToken = data.token;
+
+    localStorage.setItem('hunterToken', authToken);
+
+    showPlayer();
+
+    if (player.faction) {
+      document.querySelectorAll('[data-faction]').forEach(button => {
+        button.disabled = true;
+        button.classList.toggle(
+          'selected',
+          button.dataset.faction === player.faction
+        );
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    authToken = '';
+    localStorage.removeItem('hunterToken');
+  }
 }
 
 restoreSession();
