@@ -1,0 +1,17 @@
+{
+  "name": "hunter-system",
+  "version": "1.0.0",
+  "description": "HUNTER SYSTEM Anime Event",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
