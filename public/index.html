@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b12">
+  <title>HUNTER SYSTEM</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="background-glow"></div>  <header class="topbar">
+    <div class="logo">HUNTER <span>SYSTEM</span></div>
+    <div id="playerBadge" class="player-badge hidden"></div>
+  </header>  <main class="container">
+    <section id="loginScreen" class="panel login-panel">
+      <div class="system-icon">⚔️</div>
+      <p class="eyebrow">SYSTEM INITIALIZATION</p>
+      <h1>مرحبًا أيها الصياد</h1>
+      <p class="muted">أدخل اسمك لبدء رحلتك داخل النظام.</p>  <form id="loginForm">
+    <label for="username">اسم الصياد</label>
+    <input id="username" maxlength="24" minlength="2"
+      placeholder="اكتب اسمك هنا" required autocomplete="nickname">
+    <button class="btn primary" type="submit">دخول النظام</button>
+  </form>
+  <p id="loginStatus" class="status"></p>
+</section>
+
+<section id="appScreen" class="hidden">
+  <div class="welcome panel">
+    <p class="eyebrow">WELCOME BACK, HUNTER</p>
+    <h1>بوابة الصيادين</h1>
+    <p class="muted">اجمع النقاط وساعد فصيلك على تحقيق النصر.</p>
+    <div class="stats">
+      <div class="stat">
+        <span>نقاطك</span>
+        <strong id="playerPoints">0</strong>
+      </div>
+      <div class="stat">
+        <span>الإجابات الصحيحة</span>
+        <strong id="playerScore">0</strong>
+      </div>
+      <div class="stat">
+        <span>فصيلك</span>
+        <strong id="playerFaction">لم تختر</strong>
+      </div>
+    </div>
+  </div>
+
+  <section class="panel">
+    <p class="eyebrow">YOUR FACTION</p>
+    <h2>اختر فصيلك</h2>
+    <p class="muted">اختيارك يحدد الفصيل الذي ستساعده في المنافسة.</p>
+    <div class="faction-grid">
+      <button class="faction-card light" data-faction="light">
+        <span>☀️</span>
+        <strong>فصيل النور</strong>
+        <small>Light</small>
+      </button>
+      <button class="faction-card dark" data-faction="dark">
+        <span>🌑</span>
+        <strong>فصيل الظلام</strong>
+        <small>Dark</small>
+      </button>
+      <button class="faction-card immortal" data-faction="immortals">
+        <span>♾️</span>
+        <strong>فصيل الخالدين</strong>
+        <small>Immortals</small>
+      </button>
+    </div>
+    <p id="factionStatus" class="status"></p>
+  </section>
+
+  <section class="panel">
+    <p class="eyebrow">ANIME CHALLENGE</p>
+    <h2>اختبار الأنمي ⚡</h2>
+    <p class="muted">40 سؤالًا صعبًا من 8 أنميات. أمامك 15 ثانية لكل سؤال.</p>
+
+    <div id="quizIntro">
+      <p>اختر إجابتك قبل انتهاء الوقت. بعد الإجابة ستنتقل للسؤال التالي دون إظهار إذا كانت إجابتك صحيحة أم خاطئة.</p>
+      <button id="startQuiz" class="btn primary">ابدأ الاختبار</button>
+    </div>
+
+    <div id="quizBox" class="hidden">
+      <div class="quiz-meta">
+        <span id="questionProgress">السؤال 1</span>
+        <span>الوقت: <strong id="timer">15</strong> ثانية</span>
+      </div>
+      <div class="timer-track"><div id="timerBar"></div></div>
+      <h3 id="questionText"></h3>
+      <div id="answerOptions" class="answer-options"></div>
+      <p id="quizStatus" class="status"></p>
+    </div>
+
+    <div id="quizFinished" class="hidden">
+      <h3>انتهى الاختبار! ⚔️</h3>
+      <p>تم تسجيل إجاباتك. تابع نقاطك وساعد فصيلك.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <p class="eyebrow">MYSTERY FILE</p>
+    <h2>القضية الغامضة 🕵️</h2>
+    <h3>قضية مقتل سيف الرمال</h3>
+    <p class="muted">حلّل الأدلة، قارن أقوال المشتبه بهم، واكتب استنتاجك مع توضيح الأسباب.</p>
+    <div class="case-note">
+      <strong>المطلوب منك:</strong>
+      <p>اكتب من تعتقد أنه المسؤول، واشرح كيف تقود الأدلة والتوقيت والتناقضات إلى استنتاجك.</p>
+    </div>
+    <form id="caseForm">
+      <label for="caseConclusion">تحليلك للقضية</label>
+      <textarea id="caseConclusion" rows="6" minlength="20" maxlength="5000"
+        placeholder="اكتب تحليلك وأدلتك هنا..." required></textarea>
+      <button class="btn primary" type="submit">إرسال التحليل</button>
+    </form>
+    <p id="caseStatus" class="status"></p>
+  </section>
+
+  <section class="panel">
+    <p class="eyebrow">HUNTER RANKING</p>
+    <h2>لوحة الصدارة 🏆</h2>
+    <button id="refreshLeaderboard" class="btn secondary">تحديث النتائج</button>
+    <div id="factionScores" class="ranking-list"></div>
+    <h3>أفضل الصيادين</h3>
+    <div id="leaderboard" class="ranking-list"></div>
+  </section>
+</section>
+
+  </main>  <footer>
+    <p>HUNTER SYSTEM</p>
+    <small>رحلتك تبدأ بقرار واحد.</small>
+  </footer>  <script src="app.js"></script></body>
+                                                           </html>
